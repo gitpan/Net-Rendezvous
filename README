@@ -13,6 +13,7 @@ Install the library by running these commands:
 
    perl Makefile.PL
    make
+   make test
    make install
 
 Please report any bugs/suggestions to George Chlipala <george@walnutcs.com>

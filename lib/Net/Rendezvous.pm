@@ -1,7 +1,5 @@
 package Net::Rendezvous;
 
-$VERSION = 0.5;
-
 =head1 NAME
 
 Net::Rendezvous - Module for mDNS service discovery (Apple's Rendezvous)
@@ -10,25 +8,24 @@ Net::Rendezvous - Module for mDNS service discovery (Apple's Rendezvous)
 
 	use Net::Rendezvous;
 	
-	my $res = new Net::Rendezvous(<service>[, <protocol>]);
+	my $res = Net::Rendezvous->new(<service>[, <protocol>]);
 
-	foreach $entry ( $res->entries ) {
-		printf "%s %s:%s\n", $entry->name, $entry->address,
-			$entry->port;
-		}
+	foreach my $entry ( $res->entries ) {
+		printf "%s %s:%s\n", $entry->name, $entry->address, $entry->port;
+	}
 
 Or the cyclical way:
 
 	use Net::Rendezvous;
 
-	my $res = new Net::Rendezvous(<service>[, <protocol>]);
+	my $res = Net::Rendezvous->new(<service>[, <protocol>]);
                
-   while ( 1 ) {
-		   foreach $entry ( $res->entries ) {
-				   print $entry->name, "\n";
-		   }
-		   $res->refresh;
-   }
+	while ( 1 ) {
+	   foreach my $entry ( $res->entries ) {
+		   print $entry->name, "\n";
+	   }
+	   $res->refresh;
+   	}
 
 =head1 DESCRIPTION
 
@@ -45,11 +42,14 @@ The base object (Net::Rendezvous) will return entry objects of the class L<Net::
 
 =head1 METHODS
 
-=head2 new(<service>[, <protocol>])
+=head2 new([<service>, <protocol>])
 
-Creates a new Net::Rendezvous discovery object.  First argument (required) specifies the service to discover, 
-e.g.  http, ftp, afpovertcp, and ssh.  The second argument (optional) specifies the protocol, i.e. tcp or udp.  
-I<The default protocol is TCP>.
+Creates a new Net::Rendezvous discovery object.  First argument specifies the service to discover, 
+e.g.  http, ftp, afpovertcp, and ssh.  The second argument specifies the protocol, i.e. tcp or udp.  
+I<The default protocol is TCP>.  
+
+If no argments are specified, the resulting Net::Rendezvous object will be empty and will not perform an 
+automatic discovery upon creation.
 
 =head2 refresh
 
@@ -71,9 +71,9 @@ Shifts off the first entry of the last discovery.  The returned object will be a
         
         use Net::Rendezvous;
 
-        my $res = new Net::Rendezvous('http');
+        my $res = Net::Rendezvous->new('http');
 
-        foreach $entry ( $res->entries) {
+        foreach my $entry ( $res->entries) {
                 printf "<A HREF='http://%s%s'>%s</A><BR>", $entry->address, 
                         $entry->attribute('path'), $entry->name; 
         }
@@ -83,9 +83,9 @@ Shifts off the first entry of the last discovery.  The returned object will be a
 =head2 Find a service and connect to it
 
         use Socket;
-		use Net::Rendezvous;
+	use Net::Rendezvous;
         
-        my $res = new Net::Rendezvous('custom');
+        my $res = Net::Rendezvous->new('custom');
         
         my $entry = $res->shift_entry;
         
@@ -115,58 +115,78 @@ The Net::Rendezvous module was created by George Chlipala <george@walnutcs.com>
 
 =cut
 
+use strict;
+use vars qw($VERSION);
+
+use Net::DNS;
+use Net::Rendezvous::Entry;
+use Socket;
+
+$VERSION = 0.70;
+
 sub new {
 	my $self = {};
 	bless $self, shift;
-	$self->_init(shift);
+	$self->_init(@_);
 	return $self;
 }
 
 sub _init {
 	my $self = shift;
-	$self->application(shift);
-	$self->{'_ns'} = '224.0.0.251';
-	$self->{'_port'} = '5353';
-	$self->refresh;
+
+	$self->{'_dns_server'} = '224.0.0.251';
+	$self->{'_dns_port'} = '5353';
+
+	if (@_) {
+		$self->application(shift);
+		$self->refresh;
+	}
 	return;
 }
 	
 sub application {
 	my $self = shift;
-	if ( @_) {
+
+	if (@_) {
 		my $app = shift;
 		my $proto = shift || 'tcp';
 		$self->{'_app'} = sprintf '_%s._%s.local', $app, $proto;
-	} else {
-		return $self->{'_app'};
 	}
-	return;
+
+	return $self->{'_app'};
 }
 
 sub refresh {
 	my $self = shift;
-	use Net::DNS;
-	use Socket;
-	use Net::Rendezvous::Entry;
 
-	my $query = new Net::DNS::Packet($self->application, 'PTR');
+	my $query = Net::DNS::Packet->new($self->application, 'PTR');
 
 	socket DNS, PF_INET, SOCK_DGRAM, scalar(getprotobyname('udp'));
 	bind DNS, sockaddr_in(0,inet_aton('0.0.0.0'));
-	send DNS, $query->data, 0, sockaddr_in($self->{'_port'}, inet_aton($self->{'_ns'}));
+	send DNS, $query->data, 0, sockaddr_in($self->{'_dns_port'}, inet_aton($self->{'_dns_server'}));
 
-	my $rin = ''; my $list = [];
+	my $rout = '';
+	my $rin  = '';
+	my $list = [];
+
 	vec($rin, fileno(DNS), 1) = 1;
 
-	while ( select($rout = $rin, undef, undef, 1.0)) {
-		my $data, $rr;
+	while (select($rout = $rin, undef, undef, 1.0)) {
+
+		my $data;
 		recv(DNS, $data, 1000, 0);
-		my $ans = new Net::DNS::Packet( \$data );
-		foreach $rr ( $ans->answer ) {
-			my $host = new Net::Rendezvous::Entry($rr->rdatastr);
+
+		my $ans = Net::DNS::Packet->new(\$data);
+
+		foreach my $rr ($ans->answer) {
+			my $host = Net::Rendezvous::Entry->new($rr->rdatastr);
+			$host->dns_server($self->{'_dns_server'});
+			$host->dns_port($self->{'_dns_port'});
+			$host->fetch($rr->rdatastr);
 			push(@{$list}, $host);
 		}
 	}
+
 	$self->{'_results'} = $list;
 	return $#{$list};
 }
@@ -180,3 +200,5 @@ sub shift_entry {
 	my $self = shift;
 	return shift(@{$self->{'_results'}});
 }
+
+1;
