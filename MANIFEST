@@ -8,4 +8,5 @@ lib/Net/Rendezvous.pm
 lib/Net/Rendezvous/Entry.pm
 t/1-use.t
 t/2-entry.t
+t/3-enterprise.t
 META.yml                                Module meta-data (added by MakeMaker)

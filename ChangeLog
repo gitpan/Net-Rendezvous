@@ -1,3 +1,10 @@
+version 0.85: Fri Mar 05 20:00:00 CDT 2004
+
+	- [George Chlipala] updated 'application' method in base object to 
+	  use current domain setting.  Fixed tradition DNS discovery method.
+	  Added third test (3-enterprise.t). This test will test against the
+	  ftp entries at zeroconf.org
+
 version 0.80: Wed Mar 03 21:00:00 CDT 2004
 
 	- [George Chlipala] Setup test directory and moved test.pl to t/use.t

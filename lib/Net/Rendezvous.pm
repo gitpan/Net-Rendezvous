@@ -134,7 +134,7 @@ use Net::DNS;
 use Net::Rendezvous::Entry;
 use Socket;
 
-$VERSION = '0.80';
+$VERSION = '0.85';
 
 sub new {
 	my $self = {};
@@ -162,13 +162,11 @@ sub application {
 	my $self = shift;
 
 	if (@_) {
-		my $app = shift;
-		my $proto = shift || 'tcp';
-		$self->{'_app'} = sprintf '_%s._%s.%s', $app, $proto, 
-			$self->{'_dns_domain'};
+		$self->{'_service'} = shift;
+		$self->{'_proto'} = shift || 'tcp';
 	}
-
-	return $self->{'_app'};
+	return sprintf '_%s._%s.%s', $self->{'_service'}, $self->{'_proto'},
+		$self->{'_dns_domain'};
 }
 
 sub dns_refresh { 
@@ -177,19 +175,21 @@ sub dns_refresh {
 	my $resolv = Net::DNS::Resolver->new();
 	
 	my $query = $resolv->query($self->application, 'PTR');
+	return 0 if $query eq '';
+
 	my $list = [];
 
 	foreach my $rr ($query->answer) {
 		next if $rr->type ne 'PTR';
 		my $host = Net::Rendezvous::Entry->new($rr->ptrdname);
-		$host->dns_server($resolv->nameservers);
+		$host->dns_server( [$resolv->nameservers] );
 		$host->dns_port($resolv->port);
 		$host->fetch;
 		push(@{$list}, $host);
 	}
 
 	$self->{'_results'} = $list;
-	return $#{$list};
+	return $#{$list} + 1;
 }
 
 sub mdns_refresh {
@@ -226,7 +226,7 @@ sub mdns_refresh {
 	}
 
 	$self->{'_results'} = $list;
-	return $#{$list};
+	return $#{$list} + 1;
 }
 
 sub entries {
@@ -244,7 +244,7 @@ sub domain {
 	
 	if ( @_ ) {
 		$self->{'_dns_domain'} = shift;
-		$self->{'_dns_domain'} =~ s/[(^\.)(\.$)]//;
+		$self->{'_dns_domain'} =~ s/(^\.|\.$)//;
 	}
 	return $self->{'_dns_domain'};
 }
