@@ -1,4 +1,11 @@
-version 0.70 Tue Feb 17 10:00:00 CDT 2003: 
+version 0.80: Wed Mar 03 21:00:00 CDT 2004
+
+	- [George Chlipala] Setup test directory and moved test.pl to t/use.t
+	  Setup t/entry.t test.  Added discover function to Net::Rendezvous.
+	  Added META.yml file.  Added support for traditional DNS based service 
+	  discovery and ability to set discovery domain.
+
+version 0.70 Tue Feb 17 10:00:00 CDT 2004 
 
 	- [Dan Sully] General code clean up and added basic test script 
 	  (test.pl).

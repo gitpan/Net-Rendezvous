@@ -9,6 +9,7 @@ Net::Rendezvous::Entry - Support module for mDNS service discovery (Apple's Rend
 use Net::Rendezvous;
 	
 my $res = Net::Rendezvous->new(<service>[, <protocol>]);
+$res->discover;
 	
 foreach my $entry ( $res->entries ) {
 	print $entry->name, "\n";
@@ -84,6 +85,7 @@ Returns the binary socket address for the resource and can be used directly to b
 	use Net::Rendezvous;
 
 	my $res = Net::Rendezvous->new('http');
+	$res->discover;
 
 	foreach my $entry ( $res->entries) {
 		printf "<A HREF='http://%s%s'>%s</A><BR>", 
@@ -98,6 +100,7 @@ Returns the binary socket address for the resource and can be used directly to b
 	use Net::Rendezvous;
 	
 	my $res = Net::Rendezvous->new('custom');
+	$res->discover;
 	
 	my $entry = $res->shift_entry;
 	
@@ -141,31 +144,35 @@ sub new {
 
 sub _init {
 	my $self = shift;
-	$self->{'_dns_server'} = '224.0.0.251';
+	$self->{'_dns_server'} = [ '224.0.0.251' ];
 	$self->{'_dns_port'} = '5353';
 	$self->{'_ip_type'} = 'A';
+	$self->{'_index'} = 0;
+	$self->{'_ttl'} = 3600;
+	if ( ref($_[0]) eq 'HASH') {
+		my $attrs = shift;
+		foreach my $k ( keys(%{$attrs}) ) {
+			$self->{'_' . $k} = $attrs->{$k};
+		}
+		$self->all_attrs if ref( $attrs->{'attr'} ) eq 'HASH';
+	} elsif ( $#_ == 0 ) {
+		$self->fqdn(shift);
+	}
 	return;
 }
 
 sub fetch {
 	my $self = shift;
-	my $fqdn = shift;
 
 	my $res = Net::DNS::Resolver->new(
-		nameservers => [$self->{'_dns_server'}],
+		nameservers => $self->{'_dns_server'},
 		port => $self->{'_dns_port'}
 	);
 
-	# this doesn't seem to work from the given examples.
-	if ($fqdn) {
+	my ($name, $protocol, $ipType) = split(/\./, $self->fqdn);
 
-		$self->fqdn($fqdn);
-
-		my ($name, $protocol, $ipType) = split(/\./, $self->fqdn);
-
-		$self->name($name);
-		$self->type($protocol, $ipType);
-	}
+	$self->name($name);
+	$self->type($protocol, $ipType);
 
 	my $srv   = $res->query($self->fqdn(), 'SRV') || return;
 	my $srvrr = ($srv->answer)[0];
@@ -182,15 +189,18 @@ sub fetch {
 	my $txt = $res->query($self->fqdn, 'TXT');
 
 	# Text::Parsewords, which is called by Net::DNS::RR::TXT can spew
-	{
+	if ( $txt ) {
 		local $^W = 0;
+		my $txti = 0;
 
-		$self->txtdata([ ($txt->answer)[0]->char_str_list ]);
-
-		foreach ( ($txt->answer)[0]->char_str_list ) {
-
-			my ($key,$val) = split /=/;
-			$self->attribute($key, $val);
+		foreach my $txtrr ( $txt->answer ) {
+			$self->txtdata([$txtrr->char_str_list ]);
+			$self->index($txti++);
+			foreach my $txtln ( $txtrr->char_str_list ) {
+				my ($key,$val) = split(/=/,$txtln);
+				$self->attribute($key, $val);
+			}
+			$txti++;
 		}
 	}
 
@@ -201,24 +211,28 @@ sub fetch {
 
 sub all_attrs {
 	my $self = shift;
+	my $index = $self->index;;
 	if ( @_ ) {
-		my %hash = shift;
-		$self->{'_attr'} = { %hash };
+		my $hash = shift;
+		$index = (shift || 0);
+		$self->{'_attr'}[$index] = { %{$hash} };
 	}
 	my @txts;
-	foreach ( keys(%{$self->{'_attr'}}) ) {
-		push(@txts, sprintf('%s=%s', $_, $self->{'_attr'}{$_}));
+	foreach ( keys(%{$self->{'_attr'}[$index]}) ) {
+		push(@txts, sprintf('%s=%s', $_, $self->{'_attr'}[$index]{$_}));
 	}
-	return %{$self->{'_attr'}};
+	$self->txtdata( \@txts );
+	return %{$self->{'_attr'}[$index]};
 }
 
 sub attribute {
 	my $self = shift;
 	my $key = shift;
+	my $index = $self->index;
 	if ( @_ ) {
-		$self->{'_attr'}{$key} = shift;
+		$self->{'_attr'}[$index]{$key} = shift;
 	}
-	return $self->{'_attr'}{$key};
+	return $self->{'_attr'}[$index]{$key};
 }
 
 sub type {
@@ -253,6 +267,7 @@ sub dnsrr {
 
 	my $srv = Net::DNS::RR->new(
 		'type' => 'SRV',
+		'ttl' => $self->ttl,
 		'name' => $self->fqdn,
 		'port' => $self->port,
 		'priority' => ( $self->priority || 0 ),
@@ -262,6 +277,7 @@ sub dnsrr {
 
 	my $txt = Net::DNS::RR->new(
 		'type' => 'TXT',
+		'ttl' => $self->ttl,
 		'name' => $self->fqdn,
 		'char_str_list' => $self->txtdata
 	);
@@ -273,7 +289,7 @@ sub dnsrr {
 
 	} elsif ($type eq 'TXT') {
 
-		$packet = Net::DNS::Packet->new($self->fqdn, 'SRV', 'IN');
+		$packet = Net::DNS::Packet->new($self->fqdn, 'TXT', 'IN');
 		$packet->push('answer', $txt);	
 
 	} else {
@@ -284,6 +300,7 @@ sub dnsrr {
 
 		$packet->push('answer', Net::DNS::RR->new(
 			'type' => 'PTR',
+			'ttl' => $self->ttl,
 			'ptrdname' => $self->fqdn,
 			'name' => $app
 		));
@@ -301,15 +318,26 @@ sub dnsrr {
 
 		my $rr = Net::DNS::RR->new(
 			'type'    => $type,
+			'ttl' 	  => $self->ttl,
 			'address' => $self->{'_' . $type},
 			'name'    => $self->hostname
 		);
 
-		push(@addrs, $rr) if $self->{'_' . $type} ne '';
+		push(@addrs, $rr) if $self->{'_' . $type};
 	}
 
 	$packet->push('additional', @addrs);
 	return $packet;
+}
+
+sub txtdata {
+	my $self = shift;
+	my $index = $self->index;
+	if ( ref($_[0]) eq 'ARRAY' ) {
+		my $list = shift;
+		$self->{'_txtdata'}[$index] = [ @{$list} ];
+	}
+	return $self->{'_txtdata'}[$index];
 }
 
 sub AUTOLOAD {

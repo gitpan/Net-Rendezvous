@@ -2,6 +2,10 @@ ChangeLog
 MANIFEST			This File
 Makefile.PL			Perl MakeMaker Makefile
 README
+demo/demo.pl
+demo/list.cgi
 lib/Net/Rendezvous.pm
 lib/Net/Rendezvous/Entry.pm
-test.pl
+t/1-use.t
+t/2-entry.t
+META.yml                                Module meta-data (added by MakeMaker)
