@@ -71,7 +71,7 @@ Returns the specified attribute from the TXT record of the entry.  TXT records a
 	my $res = new Net::Rendezvous('http');
 
 	foreach $entry ( $res->entries) {
-		printf "<A HREF='http://%s/%s'>%s</A><BR>", $entry->address, 
+		printf "<A HREF='http://%s%s'>%s</A><BR>", $entry->address, 
 			$entry->attribute('path'), $entry->name; 
 	}
 	
@@ -102,6 +102,8 @@ L<Net::Rendezvous>
 =head1 COPYRIGHT
 
 This library is free software and can be distributed or modified under the same terms as Perl itself.
+
+Rendezvous (in this context) is a trademark of Apple Computer, Inc.
 
 =head1 AUTHORS
 
