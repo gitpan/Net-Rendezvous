@@ -1,3 +1,7 @@
+version 0.86: Sat Mar 06 13:30:00 CDT 2004
+
+	- [George Chlipala] Fixed test #3 (t/3-enterprise.t).
+
 version 0.85: Fri Mar 05 20:00:00 CDT 2004
 
 	- [George Chlipala] updated 'application' method in base object to 

@@ -134,7 +134,7 @@ use Net::DNS;
 use Net::Rendezvous::Entry;
 use Socket;
 
-$VERSION = '0.85';
+$VERSION = '0.86';
 
 sub new {
 	my $self = {};

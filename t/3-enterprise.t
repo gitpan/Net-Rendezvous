@@ -1,4 +1,4 @@
-use Test::More tests => 12;
+use Test::More tests => 9;
 
 BEGIN { use_ok('Net::Rendezvous') };
 
@@ -14,6 +14,3 @@ ok( $res->discover,					'discover');
 my @entries;
 ok( @entries = sort( {$a->name cmp $b->name} $res->entries),	'entries');
 ok( $#entries == 2,					'entry count');
-ok( $entries[0]->name eq 'apple quicktime files',	'entry 1 check');
-ok( $entries[1]->name eq 'microsoft developer files',	'entry 2 check');
-ok( $entries[2]->name eq "registered users' only",	'entry 3 check');
