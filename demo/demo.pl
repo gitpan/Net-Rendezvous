@@ -2,8 +2,8 @@
 
 use Net::Rendezvous;
 
-my $res = new Net::Rendezvous($ARGV[0]);
-print $res->domain($ARGV[1]), "\n";
+my $res = new Net::Rendezvous( @ARGV );
+print $res->domain(), "\n";
 $res->discover;
 
 foreach $entry ( $res->entries ) {

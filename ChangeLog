@@ -1,3 +1,9 @@
+version 0.90: Mon Dec 27 16:20:00 CDT 2004
+
+	- [George Chlipala] Added service and protocol functions.
+	  Added all_services function based on enumerate_services function by 
+	  Sébastien Aperghis-Tramoni. General code clean up.
+
 version 0.86: Sat Mar 06 13:30:00 CDT 2004
 
 	- [George Chlipala] Fixed test #3 (t/3-enterprise.t).

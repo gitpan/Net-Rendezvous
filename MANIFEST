@@ -4,6 +4,7 @@ Makefile.PL			Perl MakeMaker Makefile
 README
 demo/demo.pl
 demo/list.cgi
+demo/all_services.pl
 lib/Net/Rendezvous.pm
 lib/Net/Rendezvous/Entry.pm
 t/1-use.t

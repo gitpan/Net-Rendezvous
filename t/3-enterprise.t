@@ -6,10 +6,10 @@ use strict;
 
 my $res;
 ok( $res = Net::Rendezvous->new,			'constructor');
-ok( $res->application('ftp'),				'application set');
+ok( $res->service('http'),				'service set');
 ok( $res->domain('zeroconf.org'),			'domain set');
 ok( $res->domain eq 'zeroconf.org',			'domain get');
-ok( $res->application eq '_ftp._tcp.zeroconf.org',	'application get');
+ok( $res->fqdn eq '_http._tcp.zeroconf.org',		'fqdn get');
 ok( $res->discover,					'discover');
 my @entries;
 ok( @entries = sort( {$a->name cmp $b->name} $res->entries),	'entries');

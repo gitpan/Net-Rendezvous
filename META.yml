@@ -1,11 +1,11 @@
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         Net-Rendezvous
-version:      0.86
+version:      0.90
 version_from: lib/Net/Rendezvous.pm
 installdirs:  site
 requires:
-    Net::DNS:                      0.44
     Socket:                        1.75
+    Net::DNS:                      0.44
 
 distribution_type: module
 generated_by: ExtUtils::MakeMaker version 6.12

@@ -53,8 +53,15 @@ Creates a new Net::Rendezvous discovery object.  First argument specifies the se
 e.g.  http, ftp, afpovertcp, and ssh.  The second argument specifies the protocol, i.e. tcp or udp.  
 I<The default protocol is TCP>. The third argument specifies the discovery domain, the default is 'local'. 
 
-If no argments are specified, the resulting Net::Rendezvous object will be empty and will not perform an 
+If no arguments are specified, the resulting Net::Rendezvous object will be empty and will not perform an 
 automatic discovery upon creation.
+
+=head2 all_services([<domain>])
+
+Returns an array of new Net::Renedezvous objects for each service type advertised in the domain. The argument 
+specifies the discovery domain, the default is 'local'.  Please note that the resulting Net::Rendezvous objects 
+will not have performed a discovery during the creation.  Therefore, the discovery process will need to be run
+prior to retriving a list of entries for that Net::Rendezvous object.
 
 =head2 domain([<domain>])
 
@@ -68,6 +75,15 @@ Repeats the discovery process and reloads the entry list from this discovery.
 =head2 entries
 
 Returns an array of L<Net::Renedezvous::Entry> objects for the last discovery.
+
+=head2 protocol([<protocol>]) 
+
+Get/sets current protocol of the service type, i.e. TCP or UDP.  Please note that this is not the protocol for 
+DNS connection.
+
+=head2 service([<service type>])
+
+Get/sets current service type.
 
 =head2 shift_entry
 
@@ -111,6 +127,26 @@ Shifts off the first entry of the last discovery.  The returned object will be a
         
         close SOCK;     
 
+=head2 Find all service types and print.
+
+	use Net::Rendezvous;
+
+	foreach my $res ( Net::Rendezvous->all_services ) {
+		printf "%s (%s)\n", $res->service, $res->protocol;
+	}
+
+=head2 Find and print all service types and entries.
+
+	use Net::Rendezvous;
+
+	foreach my $res ( Net::Rendezvous->all_services ) {
+		printf "-- %s (%s) ---\n", $res->service, $res->protocol;
+		$res->discover;
+        	foreach my $entry ( $res->entries) {
+			printf "\t%s (%s:%s)\n", $entry->name, $entry->address, $entry->port;	
+		}
+	}
+
 =head1 SEE ALSO
 
 L<Net::Rendezvous::Entry>
@@ -128,13 +164,13 @@ The Net::Rendezvous module was created by George Chlipala <george@walnutcs.com>
 =cut
 
 use strict;
-use vars qw($VERSION);
+use vars qw($VERSION $AUTOLOAD);
 
 use Net::DNS;
 use Net::Rendezvous::Entry;
 use Socket;
 
-$VERSION = '0.86';
+$VERSION = '0.90';
 
 sub new {
 	my $self = {};
@@ -152,19 +188,38 @@ sub _init {
 
 	if (@_) {
 		$self->domain(pop) if $_[$#_] =~ /\./;
-		$self->application(@_);
+		$self->service(@_);
 		$self->discover;
 	}
 	return;
 }
 	
-sub application {
+sub service {
 	my $self = shift;
 
 	if (@_) {
 		$self->{'_service'} = shift;
 		$self->{'_proto'} = shift || 'tcp';
 	}
+	return $self->{'_service'};
+}
+
+sub application {
+	my $self = shift;
+	return $self->service(@_);
+}
+
+sub protocol {
+	my $self = shift;
+	if (@_) {
+		$self->{'_proto'} = shift;
+	}
+	return $self->{'_proto'};
+		
+}
+	
+sub fqdn {
+	my $self = shift;
 	return sprintf '_%s._%s.%s', $self->{'_service'}, $self->{'_proto'},
 		$self->{'_dns_domain'};
 }
@@ -174,28 +229,25 @@ sub dns_refresh {
 	
 	my $resolv = Net::DNS::Resolver->new();
 	
-	my $query = $resolv->query($self->application, 'PTR');
+	my $query = $resolv->query($self->fqdn, 'PTR');
 	return 0 if $query eq '';
+	$self->{'_dns_server'} = [$resolv->nameservers];
+	$self->{'_dns_port'} = $resolv->port;
 
-	my $list = [];
+	my @list;
 
 	foreach my $rr ($query->answer) {
 		next if $rr->type ne 'PTR';
-		my $host = Net::Rendezvous::Entry->new($rr->ptrdname);
-		$host->dns_server( [$resolv->nameservers] );
-		$host->dns_port($resolv->port);
-		$host->fetch;
-		push(@{$list}, $host);
+		push(@list, $rr->ptrdname);
 	}
 
-	$self->{'_results'} = $list;
-	return $#{$list} + 1;
+	return @list;
 }
 
 sub mdns_refresh {
 	my $self = shift;
 
-	my $query = Net::DNS::Packet->new($self->application, 'PTR');
+	my $query = Net::DNS::Packet->new($self->fqdn, 'PTR');
 
 	socket DNS, PF_INET, SOCK_DGRAM, scalar(getprotobyname('udp'));
 	bind DNS, sockaddr_in(0,inet_aton('0.0.0.0'));
@@ -203,30 +255,25 @@ sub mdns_refresh {
 
 	my $rout = '';
 	my $rin  = '';
-	my $list = [];
+	my %list;
 
 	vec($rin, fileno(DNS), 1) = 1;
 
-	while (select($rout = $rin, undef, undef, 1.0)) {
-
+	while ( select($rout = $rin, undef, undef, 1.0) ) {
 		my $data;
 		recv(DNS, $data, 1000, 0);
 
-		my $ans = Net::DNS::Packet->new(\$data);
+		my($ans,$err) = Net::DNS::Packet->new(\$data, $self->{'_debug'});
 		next if $query->header->id != $ans->header->id;
 
 		foreach my $rr ($ans->answer) {
 			next if $rr->type ne 'PTR';
-			my $host = Net::Rendezvous::Entry->new($rr->ptrdname);
-			$host->dns_server($self->{'_dns_server'});
-			$host->dns_port($self->{'_dns_port'});
-			$host->fetch;
-			push(@{$list}, $host);
+			$list{$rr->ptrdname} = 1;
 		}
 	}
 
-	$self->{'_results'} = $list;
-	return $#{$list} + 1;
+	return keys(%list);
+
 }
 
 sub entries {
@@ -257,12 +304,58 @@ sub refresh {
 sub discover {
 	my $self = shift;
 
+	my @list;
+	my $ptrs = [];
+
 	if ( $self->domain(@_) eq 'local' ) {
-		return $self->mdns_refresh;
+		@list = $self->mdns_refresh;
 	} else {
-		return $self->dns_refresh;
+		@list = $self->dns_refresh;
 	}
 
-	return;
+	foreach my $x ( 0..$#list ) {
+		my $host = Net::Rendezvous::Entry->new($list[$x]);
+		$host->dns_server($self->{'_dns_server'});
+		$host->dns_port($self->{'_dns_port'});
+		$host->fetch;
+		$list[$x] = $host;
+	}
+
+	$self->{'_results'} = [ @list ];
+	return scalar(@list);
+}
+
+sub all_services {
+	my $self = {};
+	bless $self, shift;
+	$self->_init;
+	$self->service('services._dns-sd', 'udp');	
+	
+	my @list;
+	if ( $self->domain(@_) eq 'local' ) {
+		@list = $self->mdns_refresh;
+	} else {
+		@list = $self->dns_refresh;
+	}
+
+	foreach my $i ( 0..$#list ) {
+		next unless $list[$i] =~ /^_(.+)\._(\w+)/;
+		my $srvc = Net::Rendezvous->new();
+		$srvc->service($1, $2);
+		$srvc->domain($self->domain);
+		$list[$i] = $srvc;
+	}
+	return @list;
+}
+
+sub AUTOLOAD {
+	my $self = shift;
+	my $key = $AUTOLOAD;
+	$key =~ s/^.*:://;
+	$key = '_' . $key;
+	if ( @_ ) {
+		$self->{$key} = shift;
+	}
+	return $self->{$key};
 }
 1;

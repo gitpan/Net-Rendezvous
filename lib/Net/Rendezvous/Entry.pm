@@ -169,7 +169,7 @@ sub fetch {
 		port => $self->{'_dns_port'}
 	);
 
-	my ($name, $protocol, $ipType) = split(/\./, $self->fqdn);
+	my ($name, $protocol, $ipType) = split(/(?<!\\)\./, $self->fqdn);
 
 	$self->name($name);
 	$self->type($protocol, $ipType);
@@ -182,8 +182,14 @@ sub fetch {
 	$self->port($srvrr->port);
 	$self->hostname($srvrr->target); 
 
-	foreach my $additional ($srv->additional) {
-		$self->{'_' . uc($additional->type)} = $additional->address;
+	if ($srv->additional) {
+		foreach my $additional ($srv->additional) {
+			$self->{'_' . uc($additional->type)} = $additional->address;
+		}
+	} else {
+		my $aquery = $res->query($srvrr->target, 'A');
+		my $arr = ($aquery->answer)[0];
+		$self->{'_' . uc($arr->type)} = $arr->address;
 	}
 
 	my $txt = $res->query($self->fqdn, 'TXT');

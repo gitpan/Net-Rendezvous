@@ -1,9 +1,13 @@
-This is Net::Rendezvous, a set of perl modules to utilize mDNS for service
+This is Net::Rendezvous, a set of perl modules to utilize DNS for service
 discovery.  This method of service discovery is branded as Rendezvous by 
 Apple Computer.  More information can be found at:
 
 http://www.zeroconf.org/
 http://developer.apple.com/macosx/rendezvous/index.html
+
+A list of register service types can be found at:
+
+http://www.dns-sd.org/ServiceTypes.html
 
 Requirements: 
 	perl >= 5.6.0
@@ -17,6 +21,13 @@ Install the library by running these commands:
    make install
 
 Please report any bugs/suggestions to George Chlipala <george@walnutcs.com>
+
+KNOWN BUGS
+
+ - Some special characters in domain names may not be parsed properly via Net::DNS.
+   The pure perl implementation of dn_expand in Net::DNS can misinterpt some characters. 
+   The XS implementation using dn_expand in libc can cause Net::DNS packet decoding
+   subroutines to fail completely.
 
 All files contained in this installation are Copyright (c) 2004
 George Chlipala unless otherwise specified. All rights reserved.
